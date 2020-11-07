@@ -1,6 +1,5 @@
 /**
  * jspsych-audio-ldt
- *
  **/
 
 jsPsych.plugins["audio-ldt"] = (function() {
