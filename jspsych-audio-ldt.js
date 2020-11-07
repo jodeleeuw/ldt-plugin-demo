@@ -93,8 +93,6 @@ jsPsych.plugins["audio-ldt"] = (function() {
     function next_ldt() {
       var current_trial = trial_data.rt.length;
       display_element.innerHTML = trial.words[current_trial].word;
-      trial_data.validity[current_trial] = trial.words[current_trial].validity;
-      trial_data.category[current_trial] = trial.words[current_trial].category;
       jsPsych.pluginAPI.getKeyboardResponse({
         callback_function: after_response,
         valid_responses: [trial.valid_key, trial.invalid_key],
@@ -109,6 +107,8 @@ jsPsych.plugins["audio-ldt"] = (function() {
       var current_trial = trial_data.rt.length;
       trial_data.rt[current_trial] = info.rt;
       trial_data.key[current_trial] = info.key;
+      trial_data.validity[current_trial] = trial.words[current_trial].validity;
+      trial_data.category[current_trial] = trial.words[current_trial].category;
       trial_data.correct[current_trial] = trial_data.validity[current_trial] == 'valid' ? jsPsych.pluginAPI.compareKeys(info.key, trial.valid_key) : jsPsych.pluginAPI.compareKeys(info.key, trial.invalid_key);
       if(current_trial == trial.words.length - 1) {
         end_trial();
