@@ -15,40 +15,36 @@ jsPsych.plugins["audio-ldt"] = (function() {
     parameters: {
       audio: {
         type: jsPsych.plugins.parameterType.AUDIO,
-        pretty_name: 'Audio',
         default: undefined,
-        description: 'The audio to be played.'
       },
-      choices: {
+      words: {
+        type: jsPsych.plugins.parameterType.COMPLEX,
+        nested: {
+          word: {
+            type: jsPsych.plugins.parameterType.STRING,
+            default: undefined
+          },
+          validity: {
+            type: jsPsych.plugins.parameterType.STRING,
+            default: undefined
+          },
+          category: {
+            type: jsPsych.plugins.parameterType.STRING,
+            default: undefined
+          }
+        }
+      },
+      valid_key: {
         type: jsPsych.plugins.parameterType.KEYCODE,
-        pretty_name: 'Choices',
-        array: true,
-        default: jsPsych.ALL_KEYS,
-        description: 'The keys the subject is allowed to press to respond to the stimulus.'
+        default: 'y',
       },
-      prompt: {
-        type: jsPsych.plugins.parameterType.STRING,
-        pretty_name: 'Prompt',
-        default: null,
-        description: 'Any content here will be displayed below the stimulus.'
-      },
-      trial_duration: {
-        type: jsPsych.plugins.parameterType.INT,
-        pretty_name: 'Trial duration',
-        default: null,
-        description: 'The maximum duration to wait for a response.'
-      },
-      response_ends_trial: {
-        type: jsPsych.plugins.parameterType.BOOL,
-        pretty_name: 'Response ends trial',
-        default: true,
-        description: 'If true, the trial will end when user makes a response.'
+      invalid_key: {
+        type: jsPsych.plugins.parameterType.KEYCODE,
+        default: 'n',
       },
       trial_ends_after_audio: {
         type: jsPsych.plugins.parameterType.BOOL,
-        pretty_name: 'Trial ends after audio',
-        default: false,
-        description: 'If true, then the trial will end as soon as the audio file finishes playing.'
+        default: true
       },
     }
   }
@@ -57,21 +53,29 @@ jsPsych.plugins["audio-ldt"] = (function() {
 
     var trial_data = {}
     trial_data.rt = [];
+    trial_data.key = [];
+    trial_data.correct = [];
+    trial_data.validity = [];
+    trial_data.category = [];
 
     // setup audio stimulus, including call to end_trial
     // when the audio file ends.
     var context = jsPsych.pluginAPI.audioContext();
     if(context !== null){
       var source = context.createBufferSource();
-      source.buffer = jsPsych.pluginAPI.getAudioBuffer(trial.stimulus);
+      source.buffer = jsPsych.pluginAPI.getAudioBuffer(trial.audio);
       source.connect(context.destination);
-      source.onended = function() {
-        end_trial();
+      if(trial.trial_ends_after_audio){
+        source.onended = function() {
+          end_trial();
+        }
       }
     } else {
-      var audio = jsPsych.pluginAPI.getAudioBuffer(trial.stimulus);
+      var audio = jsPsych.pluginAPI.getAudioBuffer(trial.audio);
       audio.currentTime = 0;
-      audio.addEventListener('ended', end_trial);
+      if(trial.trial_ends_after_audio){
+        audio.addEventListener('ended', end_trial);
+      }
     }
 
     // show fixation
@@ -89,10 +93,12 @@ jsPsych.plugins["audio-ldt"] = (function() {
 
     function next_ldt() {
       var current_trial = trial_data.rt.length;
-      display_element.innerHTML = trial.words[current_trial];
+      display_element.innerHTML = trial.words[current_trial].word;
+      trial_data.validity[current_trial] = trial.words[current_trial].validity;
+      trial_data.category[current_trial] = trial.words[current_trial].category;
       jsPsych.pluginAPI.getKeyboardResponse({
         callback_function: after_response,
-        valid_responses: trial.choices,
+        valid_responses: [trial.valid_key, trial.invalid_key],
         rt_method: 'performance',
         persist: false,
         allow_held_key: false
@@ -101,14 +107,14 @@ jsPsych.plugins["audio-ldt"] = (function() {
 
     // function to handle responses by the subject
     function after_response(info) {
-
-      // only record the first response
-      if (response.key == null) {
-        response = info;
-      }
-
-      if (trial.response_ends_trial) {
+      var current_trial = trial_data.rt.length;
+      trial_data.rt[current_trial] = info.rt;
+      trial_data.key[current_trial] = info.key;
+      trial_data.correct[current_trial] = trial_data.validity[current_trial] == 'valid' ? jsPsych.pluginAPI.compareKeys(info.key, trial.valid_key) : jsPsych.pluginAPI.compareKeys(info.key, trial.invalid_key);
+      if(current_trial == trial.words.length - 1) {
         end_trial();
+      } else {
+        next_ldt();
       }
     };
 
@@ -131,54 +137,18 @@ jsPsych.plugins["audio-ldt"] = (function() {
       // kill keyboard listeners
       jsPsych.pluginAPI.cancelAllKeyboardResponses();
 
-      // gather the data to store for the trial
-      if(context !== null && response.rt !== null){
-        response.rt = Math.round(response.rt * 1000);
-      }
-      var trial_data = {
-        "rt": response.rt,
-        "stimulus": trial.stimulus,
-        "key_press": response.key
-      };
-
       // clear the display
       display_element.innerHTML = '';
+
+      trial_data.rt = JSON.stringify(trial_data.rt);
+      trial_data.key = JSON.stringify(trial_data.key);
+      trial_data.correct = JSON.stringify(trial_data.correct);
+      trial_data.validity = JSON.stringify(trial_data.validity);
+      trial_data.category = JSON.stringify(trial_data.category);
 
       // move on to the next trial
       jsPsych.finishTrial(trial_data);
     };
-
-    
-
-   
-
-    // start the response listener
-    if(context !== null) {
-      var keyboardListener = jsPsych.pluginAPI.getKeyboardResponse({
-        callback_function: after_response,
-        valid_responses: trial.choices,
-        rt_method: 'audio',
-        persist: false,
-        allow_held_key: false,
-        audio_context: context,
-        audio_context_start_time: startTime
-      });
-    } else {
-      var keyboardListener = jsPsych.pluginAPI.getKeyboardResponse({
-        callback_function: after_response,
-        valid_responses: trial.choices,
-        rt_method: 'performance',
-        persist: false,
-        allow_held_key: false
-      });
-    }
-
-    // end trial if time limit is set
-    if (trial.trial_duration !== null) {
-      jsPsych.pluginAPI.setTimeout(function() {
-        end_trial();
-      }, trial.trial_duration);
-    }
 
   };
 
